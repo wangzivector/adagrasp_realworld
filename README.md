@@ -1,17 +1,26 @@
 # Real-world implementation of the AdaGrasp for Robotiq 2F/3F grippers 
-Using the adagrasp's pre-trained network weights, the system adopts are `Azure RGBD camera`, `Robotiq 2F/3F` and `UR-5e robot arm`, under programming of `ROS-melodic` middleware.
+Using the adagrasp's pre-trained network weights, the system adopts `Azure RGBD camera`, `Robotiq 2F/3F` and `UR-5e robot arm`, under programming of `ROS-melodic` middleware.
 
 ## Guideline
 0. Collect data as instructed in the original post below in [Data Preparation](#data-preparation). 
 1. Run the following sampled command line:
 ```sh
- python realgrasp.py --gripper_types robotiq_2f_85 --load_checkpoint pretrained_models/adagrasp.pth
+# hardwares
+roscore
+roslaunch azure_kinect_ros_driver kinect_rgbd.launch depth_mode:=WFOV_2X2BINNED color_resolution:=720P
+roslaunch ur_servo ur_rtde.launch ur_ip:=192.168.1.102
+roslaunch grasp_hardware_pipeline robots_vis_packs_ada.launch
+roslaunch robotiq_2f_gripper_control external_robotiq_msgctl.launch
+
+cd /home/smarnlab/SpatialHybridGen/codes/adagrasp_realworld && source ~/tf_catkin_ws/devel/setup.bash && ca adacopygen
+python realgrasp.py --gripper_types robotiq_2f_85 --load_checkpoint pretrained_models/adagrasp.pth
 ```
 
 ## Notes
 1. `realgrasp.py` is the grasping pipeline, and the `sensornode.py` is written for Azure camera stuff and TSDF generation. Besides, you should code your own Azure camera nodes and UR/Gripper communication nodes, which are subscribed by `sensornode.py` and `realgrasp.py`, respectively.
 2. As adagrasp needs top-down camera views/grasp espectially in the single camera-view situation, be sure to gurrentee a proper UR pose for perception and excuation. 
 3. `pycude.autoinit` may be not compatible with newer version of pytorch when autograd using loss.backward() in **training**. Comment out the import information if necessary in `fusion.py`. Whereas in evaluation, pycuda for tsdf computation is fine.
+4. The implemetation uses ROS TF2 which can be quite trickly in python3. One needs re-complie the TF2 package using python3 libralies and source the catkin_ws `devel/setup.sh`. Also, some efforts are needed to make the `ROS-melodic` work in python3 as well. Further information see: [ROS-python3](https://github.com/wangzivector/Coding_Instruction/blob/master/ROS_python3.md).
 
 <br>
 <br>

@@ -36,6 +36,12 @@ class SensorServer:
         self.voxel_bound = np.array([[-0.192, 0.192], # 3x2 rows: x,y,z cols: min,max
                                       [-0.192, 0.192],
                                       [ 0.000, 0.128]])
+        
+        ## For visualization tfs
+        self.grid2base = [0.5, 0.1, -0.01, 0.0, 0.0, 0.0]
+        self.end2base = [0.4135, 0.1289, 0.5320, 1.94, -1.953, -0.475]
+        self.cam2end = [0.03200, -0.11724, 0.08453, 0.48, 0.0, 0.0]
+
         self.auto_visualize_grid_flag = False
         self.show_grid_with_issue = True
         
@@ -68,32 +74,25 @@ class SensorServer:
         self.reset_depthpose_buff()
         self.TF_stuff_manage()
 
-
     def TF_stuff_manage(self):
-        ## For visualization tfs
-        grid2base = [0.5, 0.1, -0.02, 0.0, 0.0, 0.0]
-        end2base = [0.3669, 0.1284, 0.5320, 1.964, -1.953, -0.465]
-        cam2end = [0.03200, -0.11724, 0.08453, 0.48, 0.0, 0.0]
-
-        grid_origin = np.array(grid2base)
+        grid_origin = np.array(self.grid2base)
         grid_origin[:3] += self.voxel_bound[:, 0].T
         
         static_br = tf2_ros.StaticTransformBroadcaster()
+        trans_wor2base = PosRotToTransMsg("world", "base", [0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
         trans_ee2end = PosRotToTransMsg("ee_link", "armend", [0, 0, 0], [-1.20919958, 1.20919958, -1.20919958])
-        trans_end2cam = PosRotToTransMsg("armend", "rgb_camera_link", cam2end[:3], cam2end[3:])
+        trans_end2cam = PosRotToTransMsg("armend", "rgb_camera_link", self.cam2end[:3], self.cam2end[3:])
         trans_world2gridws = PosRotToTransMsg("world", "grid_ws", grid_origin[:3], grid_origin[3:])
         trans_cam2sen = PosRotToTransMsg("rgb_camera_link", "camera", [0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
-        static_br.sendTransform([trans_ee2end, trans_end2cam, trans_world2gridws, trans_cam2sen])
-
-        self.grid2base_tranf = Transform.from_list_transrotvet(grid2base)
-        self.end2base_tranf = Transform.from_list_transrotvet(end2base)
-        self.cam2end_tranf = Transform.from_list_transrotvet(cam2end)
-
+        static_br.sendTransform([trans_wor2base, trans_ee2end, trans_end2cam, trans_world2gridws, trans_cam2sen])
+        rospy.sleep(0.2)
+        self.grid2base_tranf = Transform.from_list_transrotvet(self.grid2base)
+        self.end2base_tranf = Transform.from_list_transrotvet(self.end2base)
+        self.cam2end_tranf = Transform.from_list_transrotvet(self.cam2end)
 
     def reset_depthpose_buff(self):
         self.g3d_extrinsics_buff = None
         self.g3d_depth_buff = None
-
 
     def append_depthpose_buff(self, end2base_k):
         extrinsics = np.expand_dims(self.convert_extrinsics(end2base_k), axis=0)
@@ -104,7 +103,6 @@ class SensorServer:
 
         if self.g3d_depth_buff is None: self.g3d_depth_buff = depth_image
         else: self.g3d_depth_buff = np.vstack((self.g3d_depth_buff, depth_image))
-
 
     def grid_request_callback(self, msg):
         data = np.array(msg.data)
@@ -120,7 +118,6 @@ class SensorServer:
         else:
             rospy.loginfo("Buffing depth with pose data: \n{}".format(data))
             self.append_depthpose_buff(end2base_k=data)
-
 
     def depth_callback(self, msg):
         self.depth_buff = msg
@@ -145,7 +142,6 @@ class SensorServer:
         if depth_image.mean() > 1: depth_image = depth_image / 1000.0
         return depth_image
 
-
     @staticmethod
     def depth_inpaint(image, missing_value=0):
         """
@@ -167,7 +163,6 @@ class SensorServer:
         image = image.astype(np.float32) * irange + imin
         return image
 
-
     def fetch_intrinsic(self):
         ## Camera Info
         while self.caminfo_buff is None:
@@ -179,7 +174,6 @@ class SensorServer:
         intrinsics = CameraIntrinsic(width, height, fx, fy, cx, cy)
         return intrinsics
 
-
     def fetch_extrinsics(self):
         # depth_camera_link
         # use the frame_id in self.extrinsics_info to get the transform between base and depth cam
@@ -187,14 +181,12 @@ class SensorServer:
         transformation = self.grid2base_tranf.inverse() * self.end2base_tranf * self.cam2end_tranf
         return (transformation.inverse()).to_list()
 
-
     def convert_extrinsics(self, end2base_k):
         # depth_camera_link
         # use the frame_id in self.extrinsics_info to get the transform between base and depth cam
         end2base_k_tranf = Transform.from_list_transrotvet(end2base_k)
         transformation = self.grid2base_tranf.inverse() * end2base_k_tranf * self.cam2end_tranf
         return (transformation.inverse()).to_list()
-
 
     def fetch_pointcloud(self):
         if self.depth_buff is None: return None
@@ -206,20 +198,19 @@ class SensorServer:
         points = [] # pointlist
         points = Transform.from_matrix(self.grid_shift).transform_point(points)
 
-
-    def fetch_single_grid(self, grid_type):
+    def fetch_single_grid(self, grid_type, issue_data=False):
         # return np.load("data/samples/test_sample_scene_tsdf.npy")
         intrinsic = self.fetch_intrinsic()
         depth_imgs = np.expand_dims(self.fetch_depth_image(), axis=0)
         extrinsics = np.expand_dims(self.fetch_extrinsics(), axis=0)
-        return self.gen_grid(depth_imgs, intrinsic, extrinsics, grid_type)
-    
+        grid_data = self.gen_grid(depth_imgs, intrinsic, extrinsics, grid_type)
+        if issue_data: self.show_grid(grid_data['scene_tsdf'] if grid_type=='scene' else grid_data)
+        return grid_data
 
     def issue_grid(self, grid_data):
         msg = Float32MultiArray(data=grid_data.astype(np.float32).reshape(-1))
         self.grid_pub.publish(msg)
         rospy.loginfo("[Sensor]: issuing grid : {}".format(grid_data.shape))
-
 
     def gen_grid(self, depth_imgs, intrinsic, extrinsics, grid_type):
         if grid_type == 'voxel':
@@ -235,7 +226,6 @@ class SensorServer:
         elif grid_type == 'scene':
             return scene_data
 
-
     @staticmethod
     def create_scene(volume_bounds, voxel_size, depth_image, cam_intrinsic, cam_pose_matrix, num_cam=1):
         _scene_tsdf = TSDFVolume(volume_bounds, voxel_size=voxel_size, use_gpu=False)
@@ -245,26 +235,28 @@ class SensorServer:
             _scene_tsdf.integrate(obstacle_mask, depth_image, cam_intrinsic, cam_extrinsic, obs_weight=1.)
         else:
             raise NotImplementedError("TSDF for multiple cameras to be implemented.")
-        # get scene_tsdf(WxHxD) and obstacle_vol(WxHxDx3)
+        # get scene_tsdf(WxHxD) and obstacle_vol(WxHxDx1)
         scene_tsdf, obstacle_vol = _scene_tsdf.get_volume()
 
         # make the empty space 0 in obstacle_vol
         obstacle_vol *= (scene_tsdf < 0).astype(np.int32)
         
-        scene_tsdf = np.transpose(scene_tsdf, [1, 0, 2]) # swap x-axis and y-axis to make it consitent with heightmap
-        obstacle_vol = np.transpose(obstacle_vol, [1, 0, 2])
+        # scene_tsdf = np.transpose(scene_tsdf, [1, 0, 2]) # swap x-axis and y-axis to make it consitent with heightmap
+        # obstacle_vol = np.transpose(obstacle_vol, [1, 0, 2])
         
         chn_1d = (np.clip(np.mean(scene_tsdf, axis=2), 0 ,1) * 255).astype(np.uint8)
+        valid_pix_heightmap, marg_size, map_size = np.zeros_like(chn_1d), 40, chn_1d.shape[0]
+        valid_pix_heightmap[marg_size: map_size-marg_size, marg_size: map_size-marg_size] = 1
+        valid_pix_heightmap = valid_pix_heightmap > 0.5
         scene_observation = {
             'scene_tsdf': scene_tsdf,
             'obstacle_vol': obstacle_vol,
-            'valid_pix_heightmap': np.load("data/samples/test_sample_valid_pix_heightmap.npy"),
+            'valid_pix_heightmap': valid_pix_heightmap, # np.load("data/samples/test_sample_valid_pix_heightmap.npy"),
             'color_heightmap': np.stack([chn_1d, chn_1d, chn_1d], axis=-1),
             'target_heightmap': np.zeros_like(chn_1d)
         }
         return scene_observation
     
-
     def issue_grid_using_buff(self, grid_type):
         intrinsic = self.fetch_intrinsic()
         depth_imgs = self.g3d_depth_buff
@@ -279,27 +271,23 @@ class SensorServer:
         rospy.loginfo("[Sensor]: visualize buffed {} data".format(grid_type))
         return grid_data
 
-
     def show_grid(self, grid):
         import spahybgen.utils.utils_rosvis as ut_vis
         ut_vis.clear_tsdf('grid_ws')
-        ut_vis.draw_tsdf(grid, self.voxel_size, frame_id = 'grid_ws')
+        ut_vis.draw_tsdf(grid, self.voxel_size, threshold=-1, frame_id = 'grid_ws')
     
-
     def visualize_single_grid(self, _):
         if not self.auto_visualize_grid_flag: return
         self.show_grid(self.fetch_single_grid(self.default_visual_grid_type))
 
-
     def ur_pose_state_CB(self, msg):
-        if not self.auto_visualize_grid_flag: return
+        # if not self.auto_visualize_grid_flag: return
         if msg.header.frame_id != "base2end":
             rospy.logwarn("frame_id is not right: {}".format(msg.header.frame_id))
             return
         translation = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
         rotationvet = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z]
         self.end2base_tranf = Transform.from_list_transrotvet(translation + rotationvet)
-
 
     def auto_visualize_grid(self, rate, grid_type):
         self.default_visual_grid_type = grid_type

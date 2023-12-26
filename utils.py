@@ -503,5 +503,4 @@ def visualization(vis_data, num_env, seq_len, num_open_scales, num_rotations, nu
                 vis_affordance_map = vis_affordance_map_umat.get()
 
                 data[f'{rank}_{step}_{j}_affordance_map-{i}'] = vis_affordance_map
-
     html_visualize(vis_path, data, ids, cols)
