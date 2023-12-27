@@ -11,6 +11,7 @@ from sim import RealWorldServer
 from sensornode import SensorServer
 from motionnode import PoseClient, GripperClient
 from scipy.spatial.transform import Rotation as SR
+import pickle
 
 import sys, signal
 def signal_handler(signal, frame): sys.exit(0)
@@ -20,7 +21,7 @@ parser = argparse.ArgumentParser()
 
 # global
 parser.add_argument('--mode', default='fixed_gripper', choices=['fixed_gripper'], help='test mode')
-parser.add_argument('--save', default='test_vis/object', type=str, help='where to save the visualizations')
+parser.add_argument('--save', default='object', type=str, help='where to save the visualizations')
 parser.add_argument('--gui', action="store_true", help='use GUI')
 parser.add_argument('--gpu', default='0', type=str, help='GPU device ID. -1 means cpu')
 parser.add_argument('--seed', default=0, type=int, help='random seed of pytorch and numpy')
@@ -138,7 +139,13 @@ def main():
     print(f'[Pipeline] ==> Visualizing grasp results ...')
     num_open_scale = 1 if args.random_open_scale else args.num_open_scale
     ranks += 1
-    if steps > 0: utils.visualization(data, ranks, steps, num_open_scale, args.num_rotations, ranks, args.save)
+    if steps > 0: 
+        path_save = "test_vis/" + args.save
+        utils.visualization(data, ranks, steps, num_open_scale, args.num_rotations, ranks, path_save)
+        with open(path_save + '/data.pickle', 'wb') as handle:
+            pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # with open('filename.pickle', 'rb') as handle:
+        #     b = pickle.load(handle)
     print(f'[Pipeline] ==> Grasp pipeline finished.')
 
 

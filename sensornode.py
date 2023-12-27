@@ -50,6 +50,7 @@ class SensorServer:
         self.cam2end_tranf = None
 
         depth_topic = '/depth_to_rgb/image_raw'
+        color_topic = '/rgb/image_raw'
         caminfo_topic = '/depth_to_rgb/camera_info'
         points_topic = '/depth/points'
         grid_topic = '/grid_raw'
@@ -58,6 +59,10 @@ class SensorServer:
         self.depth_buff = None
         rospy.Subscriber(depth_topic, Image, self.depth_callback)
         rospy.loginfo('[Sensor]: ROS subcriping to {}'.format(depth_topic))
+
+        self.color_buff = None
+        rospy.Subscriber(color_topic, Image, self.color_callback)
+        rospy.loginfo('[Sensor]: ROS subcriping to {}'.format(color_topic))
 
         self.caminfo_buff = None
         rospy.Subscriber(caminfo_topic, CameraInfo, self.caminfo_callback)
@@ -122,18 +127,20 @@ class SensorServer:
     def depth_callback(self, msg):
         self.depth_buff = msg
 
+    def color_callback(self, msg):
+        self.color_buff = msg
+
     def caminfo_callback(self, msg):
         self.caminfo_buff = msg
 
     def points_callback(self, msg):
         self.points_buff = msg
-    
 
     def fetch_depth_image(self):
         ## Depth Image
         while self.depth_buff is None:
             rospy.loginfo("[Sensor]: depth_image buff is None, retrying...")
-            rospy.sleep(1.0)
+            rospy.sleep(0.5)
         
         depth_image = ros_numpy.image.image_to_numpy(self.depth_buff).astype(np.float32)
         depth_image = np.nan_to_num(depth_image)
@@ -141,6 +148,15 @@ class SensorServer:
         depth_image = self.depth_inpaint(depth_image, missing_value = 0)
         if depth_image.mean() > 1: depth_image = depth_image / 1000.0
         return depth_image
+
+    def fetch_color_image(self):
+        ## Color Image
+        while self.color_buff is None:
+            rospy.loginfo("[Sensor]: color_buff buff is None, retrying...")
+            rospy.sleep(0.50)
+        color_image = ros_numpy.image.image_to_numpy(self.color_buff).astype(np.float32)
+        rospy.loginfo('color_image size: {}'.format(color_image.shape))
+        return color_image
 
     @staticmethod
     def depth_inpaint(image, missing_value=0):
@@ -202,8 +218,9 @@ class SensorServer:
         # return np.load("data/samples/test_sample_scene_tsdf.npy")
         intrinsic = self.fetch_intrinsic()
         depth_imgs = np.expand_dims(self.fetch_depth_image(), axis=0)
+        color_img = self.fetch_color_image()
         extrinsics = np.expand_dims(self.fetch_extrinsics(), axis=0)
-        grid_data = self.gen_grid(depth_imgs, intrinsic, extrinsics, grid_type)
+        grid_data = self.gen_grid(color_img, depth_imgs, intrinsic, extrinsics, grid_type)
         if issue_data: self.show_grid(grid_data['scene_tsdf'] if grid_type=='scene' else grid_data)
         return grid_data
 
@@ -212,7 +229,7 @@ class SensorServer:
         self.grid_pub.publish(msg)
         rospy.loginfo("[Sensor]: issuing grid : {}".format(grid_data.shape))
 
-    def gen_grid(self, depth_imgs, intrinsic, extrinsics, grid_type):
+    def gen_grid(self, color_img, depth_imgs, intrinsic, extrinsics, grid_type):
         if grid_type == 'voxel':
             voxel = create_voxel(self.voxel_bound, self.voxel_size, self.voxel_bound[:, 0].T, 
                                  depth_imgs, intrinsic, extrinsics)
@@ -220,14 +237,14 @@ class SensorServer:
             return grid_data
         scene_data = self.create_scene(volume_bounds=self.voxel_bound, voxel_size=self.voxel_size, 
                                         depth_image=depth_imgs[0], cam_intrinsic=intrinsic.K, 
-                                        cam_pose_matrix=extrinsics[0], num_cam=1)
+                                        cam_pose_matrix=extrinsics[0], color_img=color_img, num_cam=1)
         if grid_type == 'tsdf':
             return scene_data['scene_tsdf']
         elif grid_type == 'scene':
             return scene_data
 
     @staticmethod
-    def create_scene(volume_bounds, voxel_size, depth_image, cam_intrinsic, cam_pose_matrix, num_cam=1):
+    def create_scene(volume_bounds, voxel_size, depth_image, cam_intrinsic, cam_pose_matrix, color_img, num_cam=1):
         _scene_tsdf = TSDFVolume(volume_bounds, voxel_size=voxel_size, use_gpu=False)
         if num_cam == 1:
             obstacle_mask = np.zeros_like(np.stack((depth_image, depth_image, depth_image), axis=-1))
@@ -253,7 +270,8 @@ class SensorServer:
             'obstacle_vol': obstacle_vol,
             'valid_pix_heightmap': valid_pix_heightmap, # np.load("data/samples/test_sample_valid_pix_heightmap.npy"),
             'color_heightmap': np.stack([chn_1d, chn_1d, chn_1d], axis=-1),
-            'target_heightmap': np.zeros_like(chn_1d)
+            'target_heightmap': np.zeros_like(chn_1d),
+            'color_image': color_img
         }
         return scene_observation
     
