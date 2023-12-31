@@ -12,6 +12,8 @@ from gripper_module.gripper_barrett_hand_2f import GripperBarrettHand2F
 from gripper_module.gripper_robotiq_3f import GripperRobotiq3F
 from gripper_module.gripper_barrett_hand import GripperBarrettHand
 from gripper_module.gripper_kinova_3f import GripeprKinova3F
+from gripper_module.gripper_finray_2f import GripperFinray2F
+
 
 
 def load_gripper(gripper_type):
@@ -39,5 +41,7 @@ def load_gripper(gripper_type):
         return GripperRobotiq3F
     elif gripper_type == 'barrett_hand':
         return GripperBarrettHand
+    elif gripper_type == 'finray_2f':
+        return GripperFinray2F
     else:
         raise NotImplementedError(f'Does not support {gripper_type}')

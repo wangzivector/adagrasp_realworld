@@ -40,6 +40,7 @@ class SensorServer:
         ## For visualization tfs
         self.grid2base = [0.5, 0.1, -0.01, 0.0, 0.0, 0.0]
         self.end2base = [0.4135, 0.1289, 0.5320, 1.94, -1.953, -0.475]
+        self.end2base_joints = [-3.152, -1.6026, 1.400, -0.8803, 4.7004, 0.00173]
         self.cam2end = [0.03200, -0.11724, 0.08453, 0.48, 0.0, 0.0]
 
         self.auto_visualize_grid_flag = False

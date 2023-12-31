@@ -1,5 +1,5 @@
 ## cd ~/SpatialHybridGen/codes/adagrasp_realworld && ca adacopygen && source ~/tf_catkin_ws/devel/setup.sh
-## python realgrasp.py --gripper_types robotiq_2f_85 --load_checkpoint pretrained_models/adagrasp.pth
+## python realgrasp.py --load_checkpoint pretrained_models/adagrasp.pth --gripper_type robotiq_2f_85 --save object
 
 import argparse
 import numpy as np
@@ -27,7 +27,7 @@ parser.add_argument('--gpu', default='0', type=str, help='GPU device ID. -1 mean
 parser.add_argument('--seed', default=0, type=int, help='random seed of pytorch and numpy')
 
 # environment
-parser.add_argument('--gripper_types', default=None, type=str, nargs='+', help='list of gripper_name to be used, separated by space')
+parser.add_argument('--gripper_type', default=None, type=str, help='gripper_name to be used')
 parser.add_argument('--num_open_scale', default=5, type=int, help='number of open scales')
 parser.add_argument('--min_open_scale', default=0.5, type=float, help='minimal open scale')
 parser.add_argument('--max_open_scale', default=1, type=float, help='maximum open scale')	
@@ -63,7 +63,7 @@ def main():
     env = RealWorldServer(gui_enabled=args.gui, num_cam=1)
     print(f'[Pipeline] ==> Loading SensorServer ...')
     camera_node = SensorServer()
-    gripper_node = GripperClient(args.gripper_types[0])
+    gripper_node = GripperClient(args.gripper_type)
     print("[pipeline]: GripperClient initialized.")
     pose_node = PoseClient()
     pose_node.characterize_grasp_transform(armend2gripper=gripper_node.armend2gripper,
@@ -73,20 +73,19 @@ def main():
 
     # Prepare Gripper TSDF
     print(f'[Pipeline] ==> Loading gripper TSDF ...')
-    assert len(args.gripper_types) == 1
     open_scales = np.linspace(args.min_open_scale, args.max_open_scale, args.num_open_scale, True)
-    gripper_observation = env.load_gripper(gripper_type=args.gripper_types[0], gripper_size=1, 
+    gripper_observation = env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, 
                                                open_scales=open_scales, gripper_final_state=True)
 
     data = dict()
     rewards, scores = list(), list()
     ranks, steps = 0, 0
     
-    while (input("[Action] +++> keep runing adagrasp to initial pose ? 9/0 for quit : ") not in ['9', '0']):
+    while (input("[Action] +++> Go to initial pose ?: ") not in ['9', '0']):
         
-        pose_node.publish_ur_pose("APOSE", camera_node.end2base, repeat=True)
+        pose_node.publish_ur_pose("AJOINT", camera_node.end2base_joints, repeat=True)
 
-        if not input_signal("[Action] +++> Reach to initial pose to fetch tsdf? "): continue
+        if not input_signal("[CHECK] Arrive initial pose and fetch tsdf? "): continue
         print(f'[Pipeline] ==> Fetching scene grid tsdf ...')
         scene_observation = camera_node.fetch_single_grid(grid_type='scene', issue_data=True)
 
@@ -101,26 +100,27 @@ def main():
         action, score, others = get_action(affordance_maps[0], 0, observation['open_scales'])
         
         ## Here execute the grasping outcomes
-        grasp_pose, grasp_joints = grasppose_from_action(action, args.gripper_types[0])
+        grasp_pose, grasp_joints = grasppose_from_action(action, args.gripper_type)
         pose_node.dynamic_tf_publish(father_frame="grid_ws", child_frame="object", PosRotVec=grasp_pose)
         pose_objupper = pose_node.fetch_tf_state_posrot("base", "object_upper", True)
         pose_objgrip = pose_node.fetch_tf_state_posrot("base", "object_grip_endpos", True)
-        pose_drop = [0.357, 0.466, 0.325, 2.11, -2.11, -0.196]
+        pose_drop = [0.357, -0.250, 0.40, 2.11, -2.11, -0.0]
+        pose_drop_joints = [-4.027, -1.723, 1.944, -1.806, 4.553, -0.886]
 
         action_flow = [
-            {'name':'UR_TO_pose_upper', 'type':'APOSE', 'value':pose_objupper},
-            {'name':'GRIPPER_INIT', 'type':'GRASP', 'value':grasp_joints},
-            {'name':'UR_TO_pose_grip', 'type':'APOSE', 'value':pose_objgrip},
-            {'name':'GRIPPER_CLOSE', 'type':'GRASP', 'value':grasp_joints},
-            {'name':'UR_RE_pose_upper', 'type':'APOSE', 'value':pose_objupper},
-            {'name':'UR_RE_pose_drop', 'type':'APOSE', 'value': pose_drop},
-            {'name':'GRIPPER_OPEN', 'type':'GRASP', 'value':grasp_joints},
+            {'name':'UR_TO_pose_upper', 'type':'APOSE', 'value': pose_objupper},
+            {'name':'GRIPPER_INIT', 'type':'GRASP', 'value': grasp_joints},
+            {'name':'UR_TO_pose_grip', 'type':'APOSE', 'value': pose_objgrip},
+            {'name':'GRIPPER_CLOSE', 'type':'GRASP', 'value': grasp_joints},
+            {'name':'UR_RE_pose_upper', 'type':'APOSE', 'value': pose_objupper},
+            {'name':'UR_RE_pose_drop', 'type':'AJOINT', 'value': pose_drop_joints},
+            {'name':'GRIPPER_OPEN', 'type':'GRASP', 'value': grasp_joints},
         ]
         print("Excute action list:", action_flow)
         excute_graspactions(action_flow, gripper_node, pose_node)
 
         ## Here return reward
-        reward = input("[Reward] +++> Success or not [1 / Enter]: ") in ['1', '']
+        reward = input(f"[Reward] Grasp {steps+1} +++> Success or not [1 / Enter]: ") in ['1', '']
         rewards.append(reward)
         scores.append(score)
 
@@ -135,12 +135,12 @@ def main():
         steps += 1
 
     ## visualization
-    print(f'[Pipeline] ==> {args.gripper_types[0]} test success rate: {np.mean(rewards)} and scores {np.mean(scores)}\n')
+    print(f'[Pipeline] ==> {args.gripper_type} test success rate: {np.mean(rewards)} and scores {np.mean(scores)}\n')
     print(f'[Pipeline] ==> Visualizing grasp results ...')
     num_open_scale = 1 if args.random_open_scale else args.num_open_scale
     ranks += 1
     if steps > 0: 
-        path_save = "test_vis/" + args.save
+        path_save = "test_vis/" +args.gripper_type + "/" + args.save
         utils.visualization(data, ranks, steps, num_open_scale, args.num_rotations, ranks, path_save)
         with open(path_save + '/data.pickle', 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -165,7 +165,8 @@ def grasppose_from_action(action, gripper_type):
         grasp_joints = action[3] * 0.085
     elif gripper_type == "robotiq_3f":
         grasp_joints = action[3]
-        raise NotImplementedError(f"{gripper_type} is not implemented yet.")
+    elif gripper_type == "finray_2f":
+        grasp_joints = 1 - action[3]
     else: raise KeyError("wrong gripper type for execution.")
     return grasp_pose, grasp_joints
 
@@ -175,7 +176,7 @@ def excute_graspactions(action_flow, gripper_client, pose_node):
                             action['name'] + " {} Execute ? :".format(action['value'])): return
         if action['type'] == 'GRASP':
             gripper_client.grasp_execution(action['name'], action['value'])
-        if action['type'] in ['APOSE', 'DPOSE']:
+        if action['type'] in ['APOSE', 'DPOSE', 'AJOINT']:
             pose_node.publish_ur_pose(action['type'], action['value'], repeat=True)
 
 def input_signal(reminder="Enter to contine", supple_txt="[0:End, 9:Retn] "):

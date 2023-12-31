@@ -54,7 +54,7 @@ class PoseClient:
     def publish_ur_pose(self, pose_type, pose, repeat=False):
         pose_to_send = PoseStamped()
         pose_to_send.header.frame_id = "COM_" + pose_type
-        if pose_type in ['APOSE', 'POSE']:
+        if pose_type in ['APOSE', 'POSE', 'JOINT', "AJOINT"]:
             pose_to_send.pose.position.x = pose[0]
             pose_to_send.pose.position.y = pose[1]
             pose_to_send.pose.position.z = pose[2]
@@ -64,16 +64,8 @@ class PoseClient:
             pose_to_send.pose.orientation.z = pose[5]
             pose_to_send.pose.orientation.w = 1
             # print(pose_type, pose_to_send)
-        elif pose_type in ['JOINT']:
-            pose_to_send.pose.position.x = pose[0]
-            pose_to_send.pose.position.y = pose[1]
-            pose_to_send.pose.position.z = pose[2]
-            # direct axis-angle rotation 
-            pose_to_send.pose.orientation.x = pose[3]
-            pose_to_send.pose.orientation.y = pose[4]
-            pose_to_send.pose.orientation.z = pose[5]
-            pose_to_send.pose.orientation.w = 1
-            
+        else: raise KeyError("pose_type for publish_ur_pose() is wrong : {}".format(pose_type))
+
         self.ur_pose_pub.publish(pose_to_send)
         if repeat: 
             rospy.sleep(0.1)
@@ -165,47 +157,55 @@ Gripper Client Node
 class GripperClient:
     def __init__(self, gripper):
         """
-        Grippers: "robotiq2f", "robotiq3f"
+        Grippers: "robotiq2f", "robotiq3f", "finray2f"
         """
         gripper_name_remap = {
             "robotiq_2f_85": "robotiq2f",
             "robotiq_3f": "robotiq3f",
+            "finray_2f": "finray2f",
         }
         self.gripper = gripper_name_remap[gripper]
 
         ServerHint = {
             "robotiq2f": "roslaunch robotiq_2f_gripper_control external_robotiq_msgctl.launch",
             "robotiq3f": "roslaunch robotiq_3f_gripper_control robotiq_3f_gripper_TCP_nodes.launch",
+            "finray2f": "Open bluetooth and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
         }
 
         ExecutionFun = {
             "robotiq2f": self.robotiq2f_execution,
             "robotiq3f": self.robotiq3f_execution,
+            "finray2f": self.finray2f_execution,
         }
         
         PublisherMsgName = {
             "robotiq2f":  "gripper_action_" + "ROBOTIQ_2F",
-            "robotiq3f":  "gripper_action_" + "ROBOTIQ_2F",
+            "robotiq3f":  "gripper_action_" + "ROBOTIQ_3F",
+            "finray2f":  "easy_gripper_cmd",
         }
 
         PublisherMsgType = {
             "robotiq2f": Float32MultiArray,
             "robotiq3f": Int16MultiArray,
+            "finray2f": Vector3Stamped,
         }
 
         GripperTFName = {
             "robotiq2f": 'gripper_robotiq_2f',
             "robotiq3f": 'gripper_robotiq_3f',
+            "finray2f": 'gripper_finray_2f',
         }
 
         Armend2Gripper = {
             "robotiq2f": 0.01,
-            "robotiq3f": 0.02,
+            "robotiq3f": 0.00,
+            "finray2f": 0.00,
         }
 
         Gripper2Grip = {
             "robotiq2f": 0.18,
-            "robotiq3f": 0.2,
+            "robotiq3f": 0.26,
+            "finray2f": 0.205,
         }
 
         self.gripper_pulisher = rospy.Publisher(PublisherMsgName[self.gripper], PublisherMsgType[self.gripper], queue_size=1)
@@ -239,37 +239,49 @@ class GripperClient:
         rospy.logwarn("Robotiq 2f openwidth: {} m".format(position))
 
 
-    def robotiq3f_execution(self, action_positions):
+    def robotiq3f_execution(self, action_name, joints):
         """
         opening_distance: the actual distance of opening [m] 
         palm_position: the position of angle or distance of some grippers
         """
-        opening_position, palm_position = action_positions
-        force = 50
+        joint_position = 1 - joints
+        force = 100
         speed = 255
+        palm_position = 140
+        position_open = 10
+        position_close = 120
+        range_pp = position_close - position_open
         data_to_send = Int16MultiArray()
+        if action_name == "GRIPPER_CLOSE": opening_position = position_close+50
+        elif action_name == "GRIPPER_OPEN": opening_position = position_open
+        else: opening_position = int(range_pp * joint_position + position_open)
+
+        data_action = [opening_position, palm_position, speed, force] # all are 0-255
+        data_to_send.data = data_action
+        self.gripper_pulisher.publish(data_to_send)
+
+
+
+    def finray2f_execution(self, action_name, joints):
+        """
+        rostopic pub /easy_gripper_cmd geometry_msgs/Vector3Stamped '{header: {frame_id:  STEP},  vector: {x: .0}}'  -1
+        """
+        dis_opening = 0.12
+        init_opening = 0.0
+
+        opening_distance = joints
+        # force = 30.0
+        # speed = 0.01
+        data_to_send = Vector3Stamped()
+        data_to_send.header.frame_id = "STEP"
+
         # data_to_send.data = [0.04, 0.01, 20.0] # position, speed, force
-        if opening_position > 1:
-            if opening_position == 255 and palm_position == 140:
-                data_to_send.data = [0, 140, force, speed]
-                self.gripper_pulisher.publish(data_to_send)
-                rospy.sleep(4)
+        
+        if action_name == "GRIPPER_CLOSE": opening_position = init_opening
+        elif action_name == "GRIPPER_OPEN": opening_position = dis_opening
+        else: opening_position = opening_distance
 
-            data_action = [opening_position, palm_position, speed, force] # all are 0-255
-            data_to_send.data = data_action
-            self.gripper_pulisher.publish(data_to_send)
-            
-        else:
-            opening_position_e = opening_position  * 1.2
-            opening_distance = opening_position_e / self.max_position * 110 # 110 -> opening minor
-            palm_distance = (palm_position*opening_position) / self.max_palm_position * 255
-
-            data_action = [110-opening_distance, 255-palm_distance, speed, force] # all are 0-255
-            
-            for ind in range(len(data_action)):
-                data_action[ind] = int(data_action[ind])
-                if data_action[ind] > 255: data_action[ind] = 255
-                if data_action[ind] < 0: data_action[ind] = 0
-
-            data_to_send.data = data_action
-            self.gripper_pulisher.publish(data_to_send)
+        if opening_position > dis_opening: opening_position = dis_opening
+        
+        data_to_send.vector.x = opening_position / dis_opening
+        self.gripper_pulisher.publish(data_to_send)

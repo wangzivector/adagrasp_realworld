@@ -10,7 +10,9 @@ roscore
 roslaunch azure_kinect_ros_driver kinect_rgbd.launch depth_mode:=WFOV_2X2BINNED color_resolution:=720P
 roslaunch ur_servo ur_rtde.launch ur_ip:=192.168.1.102
 roslaunch grasp_hardware_pipeline robots_vis_packs_ada.launch
+
 roslaunch robotiq_2f_gripper_control external_robotiq_msgctl.launch
+roslaunch robotiq_3f_gripper_control robotiq_3f_gripper_TCP_nodes.launch
 
 cd /home/smarnlab/SpatialHybridGen/codes/adagrasp_realworld && source ~/tf_catkin_ws/devel/setup.bash && ca adacopygen
 python realgrasp.py --gripper_types robotiq_2f_85 --load_checkpoint pretrained_models/adagrasp.pth

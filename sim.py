@@ -12,7 +12,7 @@ from misc.basic_object_loader import load_dexnet
 
 
 class RealWorldServer:
-    def __init__(self, gui_enabled, num_cam=1):
+    def __init__(self, gui_enabled, num_cam=1, gripper_home_position=[-0.2, 0, 0.3]):
         # Defines where robot end effector can move to in world coordinates
         self._workspace_bounds = np.array([[-0.128, 0.128], # 3x2 rows: x,y,z cols: min,max
                                            [-0.128, 0.128],
@@ -47,7 +47,7 @@ class RealWorldServer:
         # gripper and list of object ids
         self._object_ids = list()
         self._gripper = None
-        self._gripper_home_position = [-0.2, 0, 0.3]
+        self._gripper_home_position = gripper_home_position # [-0.2, 0, 0.3]
 
         # gripper selection flag. If true, gripper will be load in step, instead of reset
         self.gripper_selection = False
@@ -56,29 +56,11 @@ class RealWorldServer:
         self._num_cam = num_cam
 
 
-    def load_gripper(self, gripper_type, gripper_size, open_scales=None, gripper_final_state=False, remove=False, **kwargs):
+    def load_gripper(self, gripper_type, gripper_size, open_scales=None, remove=False, **kwargs):
         # reset gripper & get gripper_observation
-        # balance 2f and 3f grippers when they are added together
-        if gripper_type == "train":
-            # load training grippers; half 2f half 3f
-            if np.random.rand() > 0.5:
-                gripper_type = ["wsg_32", "sawyer", "franka", "robotiq_2f_140", "ezgripper"]
-            else:
-                gripper_type = ["robotiq_3f", "kinova_3f"]
-
-        elif gripper_type == "test":
-            # load testing grippers; half 2f half 3f
-            if np.random.rand() > 0.5:
-                gripper_type = ["wsg_50", "rg2", "robotiq_2f_85"]
-            else:
-                gripper_type = ["barrett_hand"]
         self._gripper_type = gripper_type if isinstance(gripper_type, str) else np.random.choice(gripper_type)
-
         gripper_kwargs = dict()
         if remove:
-            if self._gripper_type == 'barrett_hand':
-                self._gripper_record_dict[(self._gripper_type, kwargs['palm_joint'])] = gripper_kwargs
-            else:
                 self._gripper_record_dict[self._gripper_type] = gripper_kwargs
 
         self._open_scales = [] if open_scales is None else open_scales
@@ -96,7 +78,12 @@ class RealWorldServer:
             num_side_images=8,
             **gripper_kwargs
         )
+        return self._gripper
 
+
+    def fetch_gripper_tsdf(self, gripper_type, gripper_size, open_scales=None, gripper_final_state=False, remove=False, **kwargs):
+        self.load_gripper(gripper_type=gripper_type, gripper_size=gripper_size, open_scales=open_scales, remove=remove)
+        
         gripper_tsdf = np.array([self._gripper.get_tsdf(open_scale) for open_scale in self._open_scales])
         gripper_close_tsdf = self._gripper.get_tsdf(0) if gripper_final_state else None
         vis_pts = [self._gripper.get_vis_pts(open_scale) for open_scale in self._open_scales]
