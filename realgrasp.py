@@ -1,5 +1,7 @@
-## cd ~/SpatialHybridGen/codes/adagrasp_realworld && ca adacopygen && source ~/tf_catkin_ws/devel/setup.sh
-## python realgrasp.py --load_checkpoint pretrained_models/adagrasp.pth --gripper_type robotiq_2f_85 --save object
+"""
+cd ~/SpatialHybridGen/codes/adagrasp_realworld && ca adacopygen && source ~/tf_catkin_ws/devel/setup.sh
+python realgrasp.py --load_checkpoint pretrained_models/adagrasp.pth --gripper_type robotiq_2f_85 --save object
+"""
 
 import argparse
 import numpy as np
@@ -13,7 +15,7 @@ from motionnode import PoseClient, GripperClient
 from scipy.spatial.transform import Rotation as SR
 import pickle
 
-import sys, signal
+import sys, signal                                                                                                                                                                                                         
 def signal_handler(signal, frame): sys.exit(0)
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -32,6 +34,7 @@ parser.add_argument('--num_open_scale', default=5, type=int, help='number of ope
 parser.add_argument('--min_open_scale', default=0.5, type=float, help='minimal open scale')
 parser.add_argument('--max_open_scale', default=1, type=float, help='maximum open scale')	
 parser.add_argument('--random_open_scale', action="store_true", help='if only choose 1 open scale')
+parser.add_argument('--multi_height', action="store_true", help='use multiple gripper height for encode')
 
 # model
 parser.add_argument('--model_type', default='adagrasp', type=str,choices=['adagrasp'], help='the type of grasping model to test')
@@ -74,12 +77,26 @@ def main():
     # Prepare Gripper TSDF
     print(f'[Pipeline] ==> Loading gripper TSDF ...')
     open_scales = np.linspace(args.min_open_scale, args.max_open_scale, args.num_open_scale, True)
-    gripper_observation = env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, 
-                                               open_scales=open_scales, gripper_final_state=True)
+    if not args.multi_height:
+        height_gripper = [0]
+        gripper_observation = env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, 
+                                                open_scales=open_scales, gripper_final_state=True,
+                                                remove=False, gripper_height=None)
+    else:
+        gripper_observation = []
+        height_gripper = [0.08, 0.085, 0.09, 0.095, 0.100, 0.105, 0.11, 0.115, 0.12] # finray3f , 0.12 [0.085, 0.12]
+        for height_i in height_gripper:
+            gripper_observation_i = env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, 
+                                                    open_scales=open_scales, gripper_final_state=True, gripper_height=height_i)
+            env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, open_scales=open_scales, 
+                                   gripper_final_state=True, remove=True, gripper_height=None)
+            gripper_observation_i['height_gripper'] = height_i
+            gripper_observation.append(gripper_observation_i)
 
     data = dict()
     rewards, scores = list(), list()
     ranks, steps = 0, 0
+    best_inds = []
     
     while (input("[Action] +++> Go to initial pose ?: ") not in ['9', '0']):
         
@@ -90,15 +107,39 @@ def main():
         scene_observation = camera_node.fetch_single_grid(grid_type='scene', issue_data=True)
 
         print(f'[Pipeline] ==> Getting inference affordance map ...')
-        observation = {**gripper_observation, **scene_observation}
-        affordance_maps = get_affordance([observation], model, device, gripper_final_state=(args.model_type=='adagrasp'))
 
-        # Zero out predicted action values for all pixels outside workspace
-        print(f'[Pipeline] ==> Obtaining action for gripper ...')
-        s = affordance_maps.shape
-        affordance_maps[np.logical_not(np.tile(observation['valid_pix_heightmap'],(s[0],s[1],s[2],1,1)))] = 0
-        action, score, others = get_action(affordance_maps[0], 0, observation['open_scales'])
-        
+        if not args.multi_height:
+            observation = {**gripper_observation, **scene_observation}
+            affordance_maps = get_affordance([observation], model, device, gripper_final_state=(args.model_type=='adagrasp'))
+            # Zero out predicted action values for all pixels outside workspace
+            print(f'[Pipeline] ==> Obtaining action for gripper ...')
+            s = affordance_maps.shape
+            affordance_maps[np.logical_not(np.tile(observation['valid_pix_heightmap'],(s[0],s[1],s[2],1,1)))] = 0
+            action, score, others = get_action(affordance_maps[0], 0, observation['open_scales'])
+            affordance_map = affordance_maps[0]
+
+        else:
+            observations = list()
+            for gripper_observation_i in gripper_observation:
+                observations.append({**gripper_observation_i, **scene_observation})
+            affordance_maps = get_affordance(observations, model, device, gripper_final_state=(args.model_type=='adagrasp'))
+            
+            score_best = 0
+            for ind_i, observation_i in enumerate(observations):
+                # Zero out predicted action values for all pixels outside workspace
+                print(f'[Pipeline] ==> Obtaining action for gripper ...')
+                s = affordance_maps.shape
+                affordance_maps[np.logical_not(np.tile(observation_i['valid_pix_heightmap'], (s[0],s[1],s[2],1,1)))] = 0
+                action_i, score_i, others_i = get_action(affordance_maps[ind_i], 0, observation_i['open_scales'])
+                print("Best action for {} height; action:{} score:{}".format(ind_i, action_i, score_i))
+                if score_i > score_best:
+                    ind_best = ind_i
+                    score_best = score_i
+                    observation = observation_i
+                    affordance_map = affordance_maps[ind_i]
+                    action, score, others = action_i, score_i, others_i
+            best_inds.append(ind_best)
+
         ## Here execute the grasping outcomes
         grasp_pose, grasp_joints = grasppose_from_action(action, args.gripper_type)
         pose_node.dynamic_tf_publish(father_frame="grid_ws", child_frame="object", PosRotVec=grasp_pose)
@@ -116,7 +157,7 @@ def main():
             {'name':'UR_RE_pose_drop', 'type':'AJOINT', 'value': pose_drop_joints},
             {'name':'GRIPPER_OPEN', 'type':'GRASP', 'value': grasp_joints},
         ]
-        print("Excute action list:", action_flow)
+        print("Excute action list for possibility {:.2f} :".format(score), action_flow)
         excute_graspactions(action_flow, gripper_node, pose_node)
 
         ## Here return reward
@@ -126,7 +167,7 @@ def main():
 
         # store data for visualization
         data[(ranks, steps)] = observation
-        data[(ranks, steps)]['affordance_map'] = affordance_maps[0]
+        data[(ranks, steps)]['affordance_map'] = affordance_map
         data[(ranks, steps)]['open_scale_idx'] = others['open_scale_idx']
         data[(ranks, steps)]['grasp_pixel'] = np.array(action[:2])
         data[(ranks, steps)]['grasp_angle'] = action[2]
@@ -146,6 +187,8 @@ def main():
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         # with open('filename.pickle', 'rb') as handle:
         #     b = pickle.load(handle)
+            
+    for k, ind_k in enumerate(best_inds): print(f"Best_inds: {k} - {ind_k} - {height_gripper[ind_k]}")
     print(f'[Pipeline] ==> Grasp pipeline finished.')
 
 
@@ -165,8 +208,8 @@ def grasppose_from_action(action, gripper_type):
         grasp_joints = action[3] * 0.085
     elif gripper_type == "robotiq_3f":
         grasp_joints = action[3]
-    elif gripper_type == "finray_2f":
-        grasp_joints = 1 - action[3]
+    elif gripper_type in ["finray_2f", "finray_3f", "finray_4f", "softpneu_3f", "rochu_2f", "rochu_4f"]:
+        grasp_joints = action[3]
     else: raise KeyError("wrong gripper type for execution.")
     return grasp_pose, grasp_joints
 

@@ -29,7 +29,7 @@ class Gripper(object):
         self._gripper_type = gripper_type
         self._gripper_size = kwargs['gripper_size']
         self._home_position = home_position
-        self._default_orientation = [0,0,0]
+        self._default_orientation = [0, 0, 0]
         self._num_side_images = num_side_images
 
         # load gripper

@@ -62,7 +62,7 @@ class RealWorldServer:
         gripper_kwargs = dict()
         if remove:
                 self._gripper_record_dict[self._gripper_type] = gripper_kwargs
-
+                return None
         self._open_scales = [] if open_scales is None else open_scales
         self._gripper_size = gripper_size
         self._gripper_orientation = [0, 0, 0]
@@ -70,6 +70,7 @@ class RealWorldServer:
 
         if self._gripper_type == 'barrett_hand':
             gripper_kwargs['palm_joint'] = 0.25 * np.random.rand() if kwargs['palm_joint'] is None else kwargs['palm_joint']
+        if kwargs['gripper_height'] is not None: gripper_kwargs['gripper_height'] = kwargs['gripper_height']
 
         self._gripper = Gripper(
             gripper_type=self._gripper_type,
@@ -82,7 +83,7 @@ class RealWorldServer:
 
 
     def fetch_gripper_tsdf(self, gripper_type, gripper_size, open_scales=None, gripper_final_state=False, remove=False, **kwargs):
-        self.load_gripper(gripper_type=gripper_type, gripper_size=gripper_size, open_scales=open_scales, remove=remove)
+        self.load_gripper(gripper_type=gripper_type, gripper_size=gripper_size, open_scales=open_scales, remove=remove, **kwargs)
         
         gripper_tsdf = np.array([self._gripper.get_tsdf(open_scale) for open_scale in self._open_scales])
         gripper_close_tsdf = self._gripper.get_tsdf(0) if gripper_final_state else None

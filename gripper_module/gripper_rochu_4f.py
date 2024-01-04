@@ -2,10 +2,10 @@ import numpy as np
 from gripper_module.gripper_base import GripperBase
 
 
-class GripperFinray2F(GripperBase):
-    def __init__(self, bullet_client, gripper_size):
-        r""" Initialization of Finray 2 finger gripper
-        specific args for Finray:
+class GripperRochu4F(GripperBase):
+    def __init__(self, bullet_client, gripper_size, gripper_height=None):
+        r""" Initialization of Rochu 4 finger gripper
+        specific args for Rochu:
             - gripper_size: global scaling of the gripper when loading URDF
         """
         super().__init__()
@@ -14,12 +14,15 @@ class GripperFinray2F(GripperBase):
         self._gripper_size = gripper_size
 
         # offset the gripper to a down facing pose for grasping
-        self._pos_offset = np.array([0, 0, 0.09 * self._gripper_size]) # offset from base to center of grasping
-        self._orn_offset = self._bullet_client.getQuaternionFromEuler([np.pi, 0, np.pi/2])
+        _gripper_height = gripper_height if gripper_height is not None else 0.125
+        print("Rochu 4f _gripper_height is : ", _gripper_height)
+        self._pos_offset = np.array([0, 0, _gripper_height * self._gripper_size]) # offset from base to center of grasping
+        self._orn_offset = self._bullet_client.getQuaternionFromEuler([0, 0, 0])
 
-        self._finger_open_distance = 0.65
+        self._finger_lower_bound = -0.3725
+        self._finger_upper_bound = 0.785
 
-        self._moving_joint_ids = [0, 1]
+        self._moving_joint_ids = [0, 1, 2, 3]
         
         # define force and speed (grasping)
         self._force = 100
@@ -27,7 +30,7 @@ class GripperFinray2F(GripperBase):
 
         
     def load(self, basePosition):
-        gripper_urdf = "assets/gripper/finray2f/urdf/finray2f.urdf"
+        gripper_urdf = "assets/gripper/rochu_4f/urdf/rochu_4f.urdf"
         body_id = self._bullet_client.loadURDF(
             gripper_urdf, flags=self._bullet_client.URDF_USE_SELF_COLLISION,
             globalScaling=self._gripper_size,
@@ -47,30 +50,33 @@ class GripperFinray2F(GripperBase):
 
     def step_constraints(self, mount_gripper_id, n_joints_before):
         pos = self._bullet_client.getJointState(mount_gripper_id, self._moving_joint_ids[0]+n_joints_before)[0]
-        self._bullet_client.setJointMotorControl2(
-            mount_gripper_id,
-            self._moving_joint_ids[1]+n_joints_before,
-            self._bullet_client.POSITION_CONTROL,
-            targetPosition=pos,
-            force=self._force,
-            positionGain=2*self._grasp_speed
-        )
-        return pos
-
-
-    def open(self, mount_gripper_id, n_joints_before, open_scale):
-        joint_ids = [i+n_joints_before for i in self._moving_joint_ids]
-        target_states = [self._finger_open_distance * (1 - open_scale), self._finger_open_distance * (1 - open_scale)]
+        joint_ids = [i+n_joints_before for i in self._moving_joint_ids[1:]]
+        target_states = [pos] * len(joint_ids)
         
         self._bullet_client.setJointMotorControlArray(
             mount_gripper_id,
             joint_ids,
             self._bullet_client.POSITION_CONTROL,
             targetPositions=target_states, 
-            forces=[self._force] * len(joint_ids)
+            forces=[self._force] * len(joint_ids),
+            positionGains=[1] * len(joint_ids)
+        )
+        return pos
+
+
+    def open(self, mount_gripper_id, n_joints_before, open_scale):
+        finger_range = self._finger_upper_bound - self._finger_lower_bound
+        target_state = self._finger_lower_bound + (1 - open_scale) * finger_range
+        
+        self._bullet_client.setJointMotorControl2(
+            mount_gripper_id,
+            self._moving_joint_ids[0]+n_joints_before,
+            self._bullet_client.POSITION_CONTROL,
+            targetPosition=target_state,
+            force=self._force
         )
 
-        for i in range(240 * 2):
+        for i in range(240 * 4):
             pos = self.step_constraints(mount_gripper_id, n_joints_before)
             self._bullet_client.stepSimulation()
 
@@ -99,7 +105,11 @@ class GripperFinray2F(GripperBase):
 
 
     def get_vis_pts(self, open_scale):
+        finger_range = self._finger_upper_bound - self._finger_lower_bound
+
         return np.array([
-            [self._finger_open_distance * (open_scale) *0.08, 0],
-            [-self._finger_open_distance * (open_scale) *0.08, 0]
+            [finger_range * (open_scale) * 0.08, 0],
+            [-finger_range * (open_scale) * 0.08, 0],
+            [0, finger_range * (open_scale) * 0.08],
+            [0, -finger_range * (open_scale) * 0.08]
         ])

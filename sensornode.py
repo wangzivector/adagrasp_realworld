@@ -156,7 +156,6 @@ class SensorServer:
             rospy.loginfo("[Sensor]: color_buff buff is None, retrying...")
             rospy.sleep(0.50)
         color_image = ros_numpy.image.image_to_numpy(self.color_buff).astype(np.float32)
-        rospy.loginfo('color_image size: {}'.format(color_image.shape))
         return color_image
 
     @staticmethod

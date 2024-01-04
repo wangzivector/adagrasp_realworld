@@ -1,5 +1,8 @@
-# cd /home/smarnlab/SpatialHybridGen/codes/adagrasp_realworld && source ~/tf_catkin_ws/devel/setup.bash && ca adacopygen
-# python learntest.py
+"""
+cd /home/smarnlab/SpatialHybridGen/codes/adagrasp_realworld && source ~/tf_catkin_ws/devel/setup.bash && ca adacopygen
+python learntest.py
+"""
+
 
 from sim import RealWorldServer
 import numpy as np
@@ -14,12 +17,12 @@ def main():
     #                                            open_scales=open_scales, gripper_final_state=True)
     # input("Terminate software.? ")
 
-    # Create worker for observationsteps
+    # Create worker for observation steps
     print(f'[Pipeline] ==> Loading RealWorldServer ...')
     env = RealWorldServer(gui_enabled=True, num_cam=1, gripper_home_position=[0, 0, 0]) # , gripper_home_position=[0, 0, 0]
     open_scales = np.linspace(0.5, 1.0, 5, True)
-    gt = "finray_2f" # robotiq_2f_85 robotiq_3f finray_2f
-    gripper = env.load_gripper(gripper_type=gt, gripper_size=1, open_scales=open_scales, gripper_final_state=True)
+    gripper_type = "finray_4f" # robotiq_2f_85 robotiq_3f finray_2f finray_3f finray_4f softpneu_3f rochu_2f rochu_4f
+    gripper = env.load_gripper(gripper_type=gripper_type, gripper_size=1, open_scales=open_scales, gripper_final_state=True, remove=False, gripper_height=None)
 
     ## Take picture
     _home_position = env._gripper_home_position

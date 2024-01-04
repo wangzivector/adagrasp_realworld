@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="rochu_2f">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="3.432E-18 -9.7747E-18 -0.018941"
+        rpy="0 0 0" />
+      <mass
+        value="0.048374" />
+      <inertia
+        ixx="5.4542E-06"
+        ixy="-7.5872E-13"
+        ixz="3.9692E-23"
+        iyy="1.6226E-05"
+        iyz="2.1494E-22"
+        izz="1.7187E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.68627 0.68627 0.68627 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="left_finger_link">
+    <inertial>
+      <origin
+        xyz="-0.010437 -0.019095 -1.5305E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.027297" />
+      <inertia
+        ixx="1.4479E-05"
+        ixy="6.8218E-07"
+        ixz="2.689E-12"
+        iyy="1.7459E-06"
+        iyz="7.7361E-10"
+        izz="1.4856E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/left_finger_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0 0 0 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/left_finger_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_finger_joint"
+    type="revolute">
+    <origin
+      xyz="-0.034 0 -0.03755"
+      rpy="1.5708 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="left_finger_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.3725"
+      upper="0.785"
+      effort="0.785"
+      velocity="0.785" />
+  </joint>
+  <link
+    name="right_finger_link">
+    <inertial>
+      <origin
+        xyz="0.010437 0.019095 -1.5305E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.027297" />
+      <inertia
+        ixx="1.4479E-05"
+        ixy="6.8218E-07"
+        ixz="-2.689E-12"
+        iyy="1.7459E-06"
+        iyz="-7.7361E-10"
+        izz="1.4856E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/right_finger_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0 0 0 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/right_finger_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_finger_joint"
+    type="revolute">
+    <origin
+      xyz="0.034 0 -0.03755"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="right_finger_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.3725"
+      upper="0.785"
+      effort="0.785"
+      velocity="0.785" />
+  </joint>
+</robot>
