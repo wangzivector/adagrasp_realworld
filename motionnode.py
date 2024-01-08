@@ -25,7 +25,7 @@ class PoseClient:
         rospy.sleep(0.1) # [pipeline]: Awaiting all TCP connection done.
 
         self.ur_pose_pub = rospy.Publisher('/pose_servo_cmd', PoseStamped, queue_size=1)
-        self.sub_servo = rospy.Subscriber("/ur_pose_state", PoseStamped, self.ur_pose_state_CB)
+        # self.sub_servo = rospy.Subscriber("/ur_pose_state", PoseStamped, self.ur_pose_state_CB) # mute it and replaced by ee_link to armend
         rospy.sleep(0.1) # [pipeline]: Awaiting all TCP connection done.
 
 
@@ -168,6 +168,7 @@ class GripperClient:
             "softpneu_3f": "softpneu3f",
             "rochu_2f": "rochu2f",
             "rochu_4f": "rochu4f",
+            "hybrid_3f": "hybrid3f",
         }
         self.gripper = gripper_name_remap[gripper]
 
@@ -177,9 +178,10 @@ class GripperClient:
             "finray2f": "Open bluetooth ROBOTM-26 and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
             "finray3f": "Open bluetooth ROBOTM-26 and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
             "finray4f": "Open bluetooth ROBOTM-26 and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
-            "softpneu3f": "Open bluetooth ROBOTG-0B and cmd: roslaunch gripper_server machine_communication.launch yaml:=default_params_BSG.yaml port:=rfcomm0 ",
+            "softpneu3f": "Open bluetooth ROBOTG-0B and cmd: roslaunch gripper_server machine_communication.launch yaml:=default_params_BSG.yaml port:=rfcomm0",
             "rochu2f": "Open bluetooth ROBOTS and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
             "rochu4f": "Open bluetooth ROBOTS and cmd: rosrun rosserial_python serial_node.py /dev/rfcomm0",
+            "hybrid3f": "Open bluetooth ROBOTG-04 and cmd: roslaunch gripper_server machine_communication.launch yaml:=default_params_HG.yaml port:=rfcomm0",
         }
 
         ExecutionFun = {
@@ -191,6 +193,7 @@ class GripperClient:
             "softpneu3f": self.softpneu_execution,
             "rochu2f": self.rochu_execution,
             "rochu4f": self.rochu_execution,
+            "hybrid3f": self.hybrid3f_execution
         }
         
         PublisherMsgName = {
@@ -202,6 +205,7 @@ class GripperClient:
             "softpneu3f": "gripper_action_" + "BSG",
             "rochu2f": "easy_gripper_cmd",
             "rochu4f": "easy_gripper_cmd",
+            "hybrid3f": "gripper_action_" + "HG",
         }
 
         PublisherMsgType = {
@@ -213,6 +217,7 @@ class GripperClient:
             "softpneu3f": Float32MultiArray,
             "rochu2f": Vector3Stamped,
             "rochu4f": Vector3Stamped,
+            "hybrid3f": Float32MultiArray
         }
 
         GripperTFName = {
@@ -224,6 +229,7 @@ class GripperClient:
             "softpneu3f": 'gripper_softpneu_3f',
             "rochu2f": 'gripper_rochu_2f',
             "rochu4f": 'gripper_rochu_4f',
+            "hybrid3f": 'gripper_hybrid_3f'
         }
 
         Armend2Gripper = {
@@ -235,6 +241,7 @@ class GripperClient:
             "softpneu3f": 0.00,
             "rochu2f": 0.00,
             "rochu4f": 0.00,
+            "hybrid3f": 0.00
         }
 
         Gripper2Grip = {
@@ -244,8 +251,9 @@ class GripperClient:
             "finray3f": 0.215,
             "finray4f": 0.215,
             "softpneu3f": 0.195,
-            "rochu2f": 0.20,
+            "rochu2f": 0.18,
             "rochu4f": 0.20,
+            "hybrid3f": 0.23,
         }
 
         self.gripper_pulisher = rospy.Publisher(PublisherMsgName[self.gripper], PublisherMsgType[self.gripper], queue_size=1)
@@ -266,8 +274,7 @@ class GripperClient:
         """
         data_to_send = Float32MultiArray()
         maximal_open = 0.085
-        open_bias = 0.035
-        position = joints
+        position = joints * maximal_open
         
         if action_name == "GRIPPER_CLOSE": position = position / 10
         if action_name == "GRIPPER_OPEN": position = maximal_open
@@ -345,8 +352,6 @@ class GripperClient:
         if action_name == "GRIPPER_CLOSE": opening_position, vacuum_act = fully_close, pneu_grasp
         elif action_name == "GRIPPER_OPEN": opening_position, vacuum_act = fully_open, pneu_grasp
         else: opening_position, vacuum_act = opening_joint + 0.1, pneu_grasp
-        
-        
         data_action = [opening_position, init_palm, vacuum_act]
         
         for ind in range(len(data_action)):
@@ -376,4 +381,32 @@ class GripperClient:
         else: opening_position = opening_distance
         
         data_to_send.vector.x = opening_position
+        self.gripper_pulisher.publish(data_to_send)
+
+
+    def hybrid3f_execution(self, action_name, joints):
+        """
+        # data_to_send.data => # position, palm, vacumming ([0.0 1.0])
+
+        roslaunch gripper_server machine_communication.launch yaml:=default_params_HG.yaml port:=rfcomm0 
+        rostopic pub /gripper_action_HG  std_msgs/Float32MultiArray  '{data:[0.0, 0.0, 0.0]}'  -1
+        """
+        vacumming_act = 3.0
+        pneu_grasp = vacumming_act
+        pneu_release = 1.0
+        fully_open = 0.0
+        fully_close = 0.9
+        init_palm = 0 # (0 to math.pi/2)
+        opening_joint = 1.0 - joints
+        data_to_send = Float32MultiArray()
+
+        if action_name == "GRIPPER_CLOSE": opening_position, vacuum_act = fully_close, pneu_grasp
+        elif action_name == "GRIPPER_OPEN": opening_position, vacuum_act = fully_open, pneu_grasp
+        else: opening_position, vacuum_act = opening_joint + 0.1, pneu_grasp
+        data_action = [opening_position, init_palm, vacuum_act]
+        
+        for ind in range(len(data_action)):
+            if data_action[ind] > 1: data_action[ind] = 1.0
+            if data_action[ind] < 0: data_action[ind] = 0.0
+        data_to_send.data = data_action
         self.gripper_pulisher.publish(data_to_send)

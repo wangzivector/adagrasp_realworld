@@ -18,6 +18,7 @@ from gripper_module.gripper_finray_4f import GripperFinray4F
 from gripper_module.gripper_softpneu_3f import GripperSoftpneu3F
 from gripper_module.gripper_rochu_2f import GripperRochu2F
 from gripper_module.gripper_rochu_4f import GripperRochu4F
+from gripper_module.gripper_hybrid_3f import GripperHybrid3F
 
 
 def load_gripper(gripper_type):
@@ -57,5 +58,7 @@ def load_gripper(gripper_type):
         return GripperRochu2F
     elif gripper_type == 'rochu_4f':
         return GripperRochu4F
+    elif gripper_type == 'hybrid_3f':
+        return GripperHybrid3F
     else:
         raise NotImplementedError(f'Does not support {gripper_type}')

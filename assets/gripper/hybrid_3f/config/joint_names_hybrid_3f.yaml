@@ -1,0 +1,1 @@
+controller_joint_names: ['', 'thumb_bsae_joint', 'thumb_prox_joint', 'thumb_dist_joint', 'index_1_base_joint', 'index_1_prox_joint', 'index_1_dist_joint', 'index_2_base_joint', 'index_2_prox_joint', 'index_2_dist_joint', ]

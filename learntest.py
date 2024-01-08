@@ -21,7 +21,7 @@ def main():
     print(f'[Pipeline] ==> Loading RealWorldServer ...')
     env = RealWorldServer(gui_enabled=True, num_cam=1, gripper_home_position=[0, 0, 0]) # , gripper_home_position=[0, 0, 0]
     open_scales = np.linspace(0.5, 1.0, 5, True)
-    gripper_type = "finray_4f" # robotiq_2f_85 robotiq_3f finray_2f finray_3f finray_4f softpneu_3f rochu_2f rochu_4f
+    gripper_type = "hybrid_3f" # robotiq_2f_85 robotiq_3f finray_2f finray_3f finray_4f softpneu_3f rochu_2f rochu_4f hybrid_3f
     gripper = env.load_gripper(gripper_type=gripper_type, gripper_size=1, open_scales=open_scales, gripper_final_state=True, remove=False, gripper_height=None)
 
     ## Take picture

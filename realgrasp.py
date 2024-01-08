@@ -32,7 +32,7 @@ parser.add_argument('--seed', default=0, type=int, help='random seed of pytorch 
 parser.add_argument('--gripper_type', default=None, type=str, help='gripper_name to be used')
 parser.add_argument('--num_open_scale', default=5, type=int, help='number of open scales')
 parser.add_argument('--min_open_scale', default=0.5, type=float, help='minimal open scale')
-parser.add_argument('--max_open_scale', default=1, type=float, help='maximum open scale')	
+parser.add_argument('--max_open_scale', default=1, type=float, help='maximum open scale')
 parser.add_argument('--random_open_scale', action="store_true", help='if only choose 1 open scale')
 parser.add_argument('--multi_height', action="store_true", help='use multiple gripper height for encode')
 
@@ -44,7 +44,7 @@ parser.add_argument('--load_checkpoint', default=None, type=str, help='path of m
 
 def main():
     args = parser.parse_args()
-          
+
     # Reset random seeds
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -84,7 +84,9 @@ def main():
                                                 remove=False, gripper_height=None)
     else:
         gripper_observation = []
-        height_gripper = [0.08, 0.085, 0.09, 0.095, 0.100, 0.105, 0.11, 0.115, 0.12] # finray3f , 0.12 [0.085, 0.12]
+        height_gripper = [0.08, 0.085, 0.09, 0.095, 0.100, 0.105, 0.11, 0.115, 0.12]
+        height_gripper = [0.09, 0.095, 0.100, 0.105, 0.11, 0.115, 0.12, 0.125, 0.13, 0.135]
+        height_gripper = [0.15, 0.16, 0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23]
         for height_i in height_gripper:
             gripper_observation_i = env.fetch_gripper_tsdf(gripper_type=args.gripper_type, gripper_size=1, 
                                                     open_scales=open_scales, gripper_final_state=True, gripper_height=height_i)
@@ -203,14 +205,7 @@ def grasppose_from_action(action, gripper_type):
     ori = (grasp_ori * original).as_rotvec()
 
     grasp_pose = [action[0] * pixel_dim, action[1] * pixel_dim, 0, ori[0], ori[1], ori[2]]
-
-    if gripper_type == "robotiq_2f_85":
-        grasp_joints = action[3] * 0.085
-    elif gripper_type == "robotiq_3f":
-        grasp_joints = action[3]
-    elif gripper_type in ["finray_2f", "finray_3f", "finray_4f", "softpneu_3f", "rochu_2f", "rochu_4f"]:
-        grasp_joints = action[3]
-    else: raise KeyError("wrong gripper type for execution.")
+    grasp_joints = action[3]
     return grasp_pose, grasp_joints
 
 def excute_graspactions(action_flow, gripper_client, pose_node):

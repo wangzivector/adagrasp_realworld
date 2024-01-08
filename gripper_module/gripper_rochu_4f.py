@@ -14,10 +14,10 @@ class GripperRochu4F(GripperBase):
         self._gripper_size = gripper_size
 
         # offset the gripper to a down facing pose for grasping
-        _gripper_height = gripper_height if gripper_height is not None else 0.125
+        _gripper_height = gripper_height if gripper_height is not None else 0.12
         print("Rochu 4f _gripper_height is : ", _gripper_height)
         self._pos_offset = np.array([0, 0, _gripper_height * self._gripper_size]) # offset from base to center of grasping
-        self._orn_offset = self._bullet_client.getQuaternionFromEuler([0, 0, 0])
+        self._orn_offset = self._bullet_client.getQuaternionFromEuler([0, 0, np.pi/4])
 
         self._finger_lower_bound = -0.3725
         self._finger_upper_bound = 0.785
@@ -106,10 +106,10 @@ class GripperRochu4F(GripperBase):
 
     def get_vis_pts(self, open_scale):
         finger_range = self._finger_upper_bound - self._finger_lower_bound
-
-        return np.array([
-            [finger_range * (open_scale) * 0.08, 0],
-            [-finger_range * (open_scale) * 0.08, 0],
-            [0, finger_range * (open_scale) * 0.08],
-            [0, -finger_range * (open_scale) * 0.08]
+        open_length = finger_range * (open_scale) * 0.06
+        return np.cos(np.pi/4) * np.array([
+            [open_length, open_length],
+            [open_length, -open_length],
+            [-open_length, open_length],
+            [-open_length, -open_length],
         ])
